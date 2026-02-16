@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WHALE CATCHER Terminal - Heat-Mapped Leaderboard</title>
+    <style>
+        :root {
+            --bg-color: #0e1117;
+            --card-color: #1e1e1e;
+            --text-color: #fafafa;
+            --border-color: #31333f;
+            --glow-green: 0 0 15px rgba(0, 255, 0, 0.3);
+            --glow-red: 0 0 15px rgba(255, 75, 75, 0.3);
+            --hot-glow: 0 0 20px rgba(188, 19, 254, 0.5); /* Purple for hot stocks */
+        }
+        body { font-family: sans-serif; background-color: var(--bg-color); color: var(--text-color); padding: 20px; margin: 0; }
+        #dashboard { display: flex; flex-direction: column; gap: 20px; max-width: 1200px; margin: 0 auto; }
+        
+        .ticker-card { 
+            background: var(--card-color); 
+            border: 1px solid var(--border-color); 
+            padding: 15px; 
+            border-radius: 8px;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease;
+        }
+
+        /* Hot stock visual effect */
+        .is-hot { border-color: #bc13fe; box-shadow: var(--hot-glow); }
+
+        .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .ticker-name { font-size: 1.4em; font-weight: bold; color: #fff; }
+        .score-badge { background: #bc13fe; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; }
+
+        .tables-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+        th { text-align: left; opacity: 0.6; padding: 5px; border-bottom: 1px solid #333; }
+        td { padding: 8px 5px; border-bottom: 1px dotted #222; }
+
+        .ce-text { color: #00ff41; }
+        .pe-text { color: #ff4b4b; }
+        
+        .whale-row { background: rgba(188, 19, 254, 0.1); font-weight: bold; }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .new-row { animation: pulse 0.5s ease-in-out; }
+    </style>
+</head>
+<body>
+
+    <h2 style="text-align:center; color: #bc13fe;"> WHALE RADAR: LIVE DECAY SORTING </h2>
+    <div id="dashboard"></div>
+
+    <script>
+        const dashboard = document.getElementById('dashboard');
+        const tickerScores = {}; // Stores the "Heat" for each stock
+        const DECAY_RATE = 0.98; // Every second, stocks lose 2% of their heat
+        const POINTS_PER_TRADE = 100; // Points given for a new whale alert
+
+        const socket = new WebSocket('ws://localhost:8000/ws');
+
+        socket.onmessage = function(event) {
+            const trade = JSON.parse(event.data);
+            const ticker = trade.ticker;
+
+            // 1. UPDATE HEAT SCORE
+            // More expensive trades give slightly more "Heat"
+            const valueBonus = Math.min(trade.value / 100000, 50); 
+            tickerScores[ticker] = (tickerScores[ticker] || 0) + POINTS_PER_TRADE + valueBonus;
+
+            // 2. FIND OR CREATE CARD
+            let card = document.getElementById(`card-${ticker}`);
+            if (!card) {
+                card = createTickerCard(ticker);
+                dashboard.appendChild(card);
+            }
+
+            // 3. ADD TRADE TO TABLE
+            const side = trade.option_type.toUpperCase() === 'CE' ? 'ce' : 'pe';
+            const tbody = document.getElementById(`${side}-tbody-${ticker}`);
+            const row = createRow(trade);
+            
+            tbody.insertBefore(row, tbody.firstChild);
+
+            // 4. ROW LIMIT LOGIC (STILL 50)
+            if (tbody.rows.length > 50) {
+                tbody.deleteRow(-1);
+            }
+
+            updateCardVisuals(card, ticker);
+        };
+
+        function createTickerCard(ticker) {
+            const card = document.createElement('div');
+            card.className = 'ticker-card';
+            card.id = `card-${ticker}`;
+            card.innerHTML = `
+                <div class="header-row">
+                    <div class="ticker-name">${ticker} <span class="score-badge" id="score-${ticker}">Heat: 0</span></div>
+                </div>
+                <div class="tables-grid">
+                    <div>
+                        <h4 class="ce-text">CALL WHALES (CE)</h4>
+                        <table>
+                            <thead><tr><th>Time</th><th>Strike</th><th>Price</th><th>Value</th></tr></thead>
+                            <tbody id="ce-tbody-${ticker}"></tbody>
+                        </table>
+                    </div>
+                    <div>
+                        <h4 class="pe-text">PUT WHALES (PE)</h4>
+                        <table>
+                            <thead><tr><th>Time</th><th>Strike</th><th>Price</th><th>Value</th></tr></thead>
+                            <tbody id="pe-tbody-${ticker}"></tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            return card;
+        }
+
+        function createRow(trade) {
+            const tr = document.createElement('tr');
+            if (trade.value > 500000) tr.className = 'whale-row';
+            tr.classList.add('new-row');
+            
+            const valDisplay = (trade.value / 100000).toFixed(1) + "L";
+            const sideClass = trade.option_type.toUpperCase() === 'CE' ? 'ce-text' : 'pe-text';
+
+            tr.innerHTML = `
+                <td style="opacity:0.5">${trade.timestamp}</td>
+                <td><span class="${sideClass}">${trade.strike}</span></td>
+                <td>₹${trade.ltp}</td>
+                <td style="font-weight:bold">₹${valDisplay}</td>
+            `;
+            return tr;
+        }
+
+        function updateCardVisuals(card, ticker) {
+            const score = tickerScores[ticker] || 0;
+            const scoreLabel = document.getElementById(`score-${ticker}`);
+            if (scoreLabel) scoreLabel.innerText = `Heat: ${Math.round(score)}`;
+
+            // If score is high, make the card glow purple
+            if (score > 200) card.classList.add('is-hot');
+            else card.classList.remove('is-hot');
+        }
+
+        // DECAY LOOP: Runs every 1 second to "cool down" the stocks
+        setInterval(() => {
+            for (let ticker in tickerScores) {
+                tickerScores[ticker] *= DECAY_RATE; // Lose heat
+                if (tickerScores[ticker] < 1) tickerScores[ticker] = 0; // Stop at zero
+                
+                const card = document.getElementById(`card-${ticker}`);
+                if (card) updateCardVisuals(card, ticker);
+            }
+            sortTickers();
+        }, 1000);
+
+        // SORTING: Sorts by the Hidden Heat Score instead of Row Count
+        function sortTickers() {
+            const cards = Array.from(dashboard.children);
+            if (cards.length < 2) return;
+
+            cards.sort((a, b) => {
+                const tickerA = a.id.replace('card-', '');
+                const tickerB = b.id.replace('card-', '');
+                return (tickerScores[tickerB] || 0) - (tickerScores[tickerA] || 0);
+            });
+
+            // Re-append in order
+            cards.forEach(card => dashboard.appendChild(card));
+        }
+    </script>
+</body>
+</html>
