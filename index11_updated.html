@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WHALE RADAR</title>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #080c10;
+            --panel: #0d1117;
+            --border: #1e2a38;
+            --ce: #00ff88;
+            --pe: #ff3d6b;
+            --accent: #f5a623;
+            --hot: #bc13fe;
+            --dim: #4a5568;
+            --text: #e2e8f0;
+            --mono: 'Share Tech Mono', monospace;
+            --sans: 'Barlow Condensed', sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html { height: 100%; overflow: hidden; }
+
+        body {
+            font-family: var(--mono);
+            background: var(--bg);
+            color: var(--text);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* === TOPBAR === */
+        #topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 16px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+            gap: 16px;
+        }
+
+        #topbar h1 {
+            font-family: var(--sans);
+            font-weight: 900;
+            font-size: 1.3em;
+            letter-spacing: 0.15em;
+            color: var(--hot);
+            text-transform: uppercase;
+            flex-shrink: 0;
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 20px;
+            font-size: 0.75em;
+            color: var(--dim);
+            flex: 1;
+        }
+
+        .stat { display: flex; flex-direction: column; }
+        .stat-val { color: var(--text); font-size: 1.1em; }
+
+        #conn-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #ff3d3d;
+            box-shadow: 0 0 6px #ff3d3d;
+            transition: all 0.3s;
+            flex-shrink: 0;
+            align-self: center;
+        }
+        #conn-dot.live { background: var(--ce); box-shadow: 0 0 8px var(--ce); }
+
+        .top-controls { display: flex; gap: 8px; flex-shrink: 0; }
+        .btn {
+            font-family: var(--mono);
+            font-size: 0.75em;
+            background: transparent;
+            color: var(--dim);
+            border: 1px solid var(--border);
+            padding: 4px 10px;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+        .btn:hover { color: var(--text); border-color: var(--dim); }
+        .btn.active { color: var(--accent); border-color: var(--accent); }
+
+        /* === MAIN LAYOUT === */
+        #layout {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            min-height: 0; /* critical for nested flex scroll */
+        }
+
+        /* === LEFT: TICKER FEED === */
+        #feed-col {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-height: 0; /* critical — lets flexbox shrink below content size */
+        }
+
+        #feed-col::-webkit-scrollbar { width: 6px; }
+        #feed-col::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
+        #feed-col::-webkit-scrollbar-thumb { background: #2a3a4a; border-radius: 3px; }
+        #feed-col::-webkit-scrollbar-thumb:hover { background: #3a5060; }
+
+        /* Compact mode — cards show as single-line rows */
+        #feed-col.compact-mode .card-body { display: none; }
+        /* .expanded overrides compact — lets user peek at a single card */
+        #feed-col.compact-mode .ticker-card.expanded .card-body { display: grid !important; }
+        #feed-col.compact-mode .ticker-card { border-radius: 4px; }
+        #feed-col.compact-mode .card-header { padding: 5px 10px; }
+        #feed-col.compact-mode .heat-bar-wrap { max-width: 60px; }
+        #feed-col.compact-mode .ticker-name { font-size: 1em; }
+
+        /* Non-compact: collapsed by default, expanded when .expanded */
+        .ticker-card .card-body { display: none; }
+        .ticker-card.expanded .card-body { display: grid; }
+
+        /* === TICKER CARD === */
+        .ticker-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            overflow: hidden;
+            flex-shrink: 0; /* cards must not compress — let the container scroll instead */
+            transition: border-color 0.4s, box-shadow 0.4s, transform 0.3s;
+        }
+
+        .ticker-card.is-hot {
+            border-color: var(--hot);
+            box-shadow: 0 0 16px rgba(188,19,254,0.25);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            cursor: pointer;
+            user-select: none;
+            border-bottom: 1px solid var(--border);
+            background: rgba(255,255,255,0.02);
+        }
+
+        .card-header:hover { background: rgba(255,255,255,0.04); }
+
+        .ticker-name {
+            font-family: var(--sans);
+            font-weight: 700;
+            font-size: 1.2em;
+            letter-spacing: 0.05em;
+            flex: 1;
+        }
+
+        .heat-bar-wrap {
+            flex: 1;
+            max-width: 100px;
+            height: 4px;
+            background: var(--border);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .heat-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--hot));
+            border-radius: 2px;
+            transition: width 0.6s ease;
+        }
+
+        .heat-label {
+            font-size: 0.7em;
+            color: var(--hot);
+            min-width: 60px;
+            text-align: right;
+        }
+
+        .oi-badge {
+            font-size: 0.65em;
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid currentColor;
+        }
+
+        .oi-up { color: var(--ce); }
+        .oi-down { color: var(--pe); }
+        .oi-neutral { color: var(--dim); }
+
+        .ratio-badge {
+            font-size: 0.65em;
+            padding: 2px 7px;
+            border-radius: 3px;
+            border: 1px solid currentColor;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+        .ratio-bull { color: var(--ce); }
+        .ratio-bear { color: var(--pe); }
+        .ratio-neutral { color: var(--dim); }
+
+        .collapse-arrow {
+            color: var(--dim);
+            font-size: 0.7em;
+            transition: transform 0.2s;
+        }
+        .collapsed .collapse-arrow { transform: rotate(-90deg); }
+
+        .card-body {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+        }
+
+        .card-body.hidden { display: none; }
+
+        .side-panel { padding: 10px; }
+        .side-panel:first-child { border-right: 1px solid var(--border); }
+
+        .side-label {
+            font-family: var(--sans);
+            font-size: 0.75em;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            margin-bottom: 6px;
+        }
+
+        table { width: 100%; border-collapse: collapse; font-size: 0.72em; }
+        th {
+            color: var(--dim);
+            text-align: left;
+            padding: 3px 4px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 400;
+        }
+        td { padding: 5px 4px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+
+        .ce-text { color: var(--ce); }
+        .pe-text { color: var(--pe); }
+
+        .whale-row { background: rgba(188,19,254,0.08); }
+
+        @keyframes fadeIn {
+            from { opacity: 0; background: rgba(255,255,255,0.06); }
+            to { opacity: 1; background: transparent; }
+        }
+
+        .new-row { animation: fadeIn 0.5s ease forwards; }
+
+        .category-tag {
+            font-size: 0.65em;
+            padding: 1px 4px;
+            border-radius: 2px;
+            background: rgba(255,255,255,0.07);
+            color: var(--dim);
+        }
+        .category-tag.HIDDEN_ACCUMULATION { color: var(--accent); background: rgba(245,166,35,0.1); }
+        .category-tag.MOMENTUM { color: #60a5fa; background: rgba(96,165,250,0.1); }
+
+        /* === RIGHT: HISTORY / LOG === */
+        #side-col {
+            width: 280px;
+            flex-shrink: 0;
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        #side-col.collapsed { width: 0; border: none; }
+
+        .side-header {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            font-family: var(--sans);
+            font-size: 0.8em;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            color: var(--accent);
+            text-transform: uppercase;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        #alert-log {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        #alert-log::-webkit-scrollbar { width: 3px; }
+        #alert-log::-webkit-scrollbar-thumb { background: var(--border); }
+
+        .log-entry {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 7px 9px;
+            font-size: 0.7em;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .log-entry .log-ticker {
+            font-family: var(--sans);
+            font-weight: 700;
+            font-size: 1.2em;
+        }
+
+        .log-meta { color: var(--dim); margin-top: 2px; }
+
+        /* === LEADERBOARD at bottom === */
+        #leaderboard {
+            border-top: 1px solid var(--border);
+            padding: 8px 12px;
+            flex-shrink: 0;
+        }
+
+        .lb-title {
+            font-size: 0.65em;
+            color: var(--dim);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 6px;
+        }
+
+        #lb-list {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .lb-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.7em;
+        }
+
+        .lb-rank { color: var(--dim); min-width: 16px; }
+        .lb-name { flex: 1; font-family: var(--sans); font-weight: 600; }
+        .lb-bar-wrap { width: 60px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+        .lb-bar { height: 100%; background: var(--hot); border-radius: 2px; transition: width 0.5s ease; }
+        .lb-val { color: var(--dim); min-width: 36px; text-align: right; }
+
+        /* === SUMMARY BAR at top of feed === */
+        #summary-strip {
+            display: flex;
+            gap: 12px;
+            padding: 6px 10px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            font-size: 0.72em;
+            flex-shrink: 0; /* never compress */
+            overflow-x: auto;
+        }
+
+        #summary-strip::-webkit-scrollbar { height: 0; }
+
+        .strip-item { display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+        .strip-item .s-val { font-weight: 600; }
+        .strip-sep { color: var(--border); }
+
+        /* Responsive */
+        @media (max-width: 700px) {
+            #side-col { display: none; }
+        }
+
+        /* === FILTER BAR === */
+        #filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 7px 12px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            font-size: 0.75em;
+            flex-shrink: 0;
+        }
+
+        #filter-bar label { color: var(--dim); white-space: nowrap; }
+
+        #threshold-input {
+            font-family: var(--mono);
+            font-size: 1em;
+            background: var(--bg);
+            color: var(--accent);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            padding: 3px 8px;
+            width: 60px;
+            text-align: center;
+        }
+        #threshold-input:focus { outline: none; border-color: var(--accent); }
+
+        #fetch-movers-btn {
+            font-family: var(--mono);
+            font-size: 0.85em;
+            background: transparent;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            padding: 4px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        #fetch-movers-btn:hover { background: rgba(245,166,35,0.1); }
+        #fetch-movers-btn.loading { opacity: 0.5; pointer-events: none; }
+
+        #filter-status {
+            color: var(--dim);
+            font-size: 0.9em;
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #clear-filter-btn {
+            font-family: var(--mono);
+            font-size: 0.85em;
+            background: transparent;
+            color: var(--pe);
+            border: 1px solid var(--pe);
+            padding: 3px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            display: none;
+            transition: all 0.2s;
+        }
+        #clear-filter-btn:hover { background: rgba(255,61,107,0.1); }
+
+        /* Filtered-out cards are completely hidden */
+        .ticker-card.filtered-out {
+            display: none !important;
+        }
+
+        /* Filtered summary bar */
+        #filtered-summary {
+            display: none;
+            padding: 5px 12px;
+            background: rgba(255,61,107,0.06);
+            border: 1px solid rgba(255,61,107,0.2);
+            border-radius: 4px;
+            font-size: 0.72em;
+            color: var(--dim);
+            flex-shrink: 0;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        #filtered-summary.visible {
+            display: flex;
+            align-items: center;
+        }
+        .filtered-pill {
+            background: rgba(255,61,107,0.1);
+            border: 1px solid rgba(255,61,107,0.25);
+            border-radius: 3px;
+            padding: 1px 6px;
+            color: var(--pe);
+            font-size: 0.95em;
+            white-space: nowrap;
+        }
+        .filtered-pill.up {
+            background: rgba(0,255,136,0.07);
+            border-color: rgba(0,255,136,0.2);
+            color: var(--ce);
+        }
+
+        /* Mover badge shown on filtered cards */
+        .mover-badge {
+            font-size: 0.65em;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: 600;
+            margin-left: 4px;
+        }
+        .mover-badge.up { color: var(--ce); border: 1px solid var(--ce); background: rgba(0,255,136,0.07); }
+        .mover-badge.down { color: var(--pe); border: 1px solid var(--pe); background: rgba(255,61,107,0.07); }
+    </style>
+</head>
+<body>
+
+<div id="topbar">
+    <h1>⬡ Whale Radar</h1>
+
+    <div class="status-bar">
+        <div class="stat">
+            <span style="color:var(--dim);font-size:0.8em">ALERTS TODAY</span>
+            <span class="stat-val" id="stat-alerts">0</span>
+        </div>
+        <div class="stat">
+            <span style="color:var(--dim);font-size:0.8em">TOTAL VALUE</span>
+            <span class="stat-val" id="stat-value">₹0L</span>
+        </div>
+        <div class="stat">
+            <span style="color:var(--dim);font-size:0.8em">HOT STOCKS</span>
+            <span class="stat-val" id="stat-hot">0</span>
+        </div>
+        <div class="stat">
+            <span style="color:var(--dim);font-size:0.8em">CE/PE RATIO</span>
+            <span class="stat-val" id="stat-ratio">–</span>
+        </div>
+    </div>
+
+    <div class="top-controls">
+        <button class="btn" onclick="setAllCollapse(true)">Collapse All</button>
+        <button class="btn" onclick="setAllCollapse(false)">Expand All</button>
+        <button class="btn" id="compact-btn" onclick="toggleCompact()">⊞ Compact</button>
+        <button class="btn active" onclick="toggleSidePanel()" id="log-toggle-btn">◧ Log</button>
+    </div>
+
+    <div id="conn-dot" title="Disconnected"></div>
+</div>
+
+<div id="layout">
+    <!-- MAIN FEED -->
+    <div id="feed-col">
+        <div id="summary-strip">
+            <span style="color:var(--dim)">MARKET PULSE —</span>
+            <span id="pulse-msg" style="color:var(--accent)">Waiting for data...</span>
+            <span class="strip-sep">|</span>
+            <span style="color:var(--dim)">TRACKING</span>
+            <span id="stock-count" style="color:var(--text)">0 stocks</span>
+        </div>
+
+        <div id="filter-bar">
+            <label>⚡ NOISE FILTER</label>
+            <label style="color:var(--dim)">Hide stocks moving more than</label>
+            <input type="number" id="threshold-input" value="2.0" min="0.1" max="20" step="0.1">
+            <label style="color:var(--dim)">%</label>
+            <button id="fetch-movers-btn" onclick="fetchAndApplyFilter()">▶ Fetch &amp; Apply</button>
+            <span id="filter-status">Not applied — click Fetch &amp; Apply</span>
+            <button id="clear-filter-btn" onclick="clearFilter()">✕ Clear</button>
+        </div>
+        <div id="filtered-summary">
+            <span style="color:var(--dim);margin-right:6px;flex-shrink:0">FILTERED OUT:</span>
+            <div id="filtered-pills" style="display:flex;flex-wrap:wrap;gap:4px;flex:1"></div>
+            <span id="filtered-count" style="color:var(--pe);margin-left:8px;flex-shrink:0"></span>
+        </div>
+        <!-- Cards injected here -->
+    </div>
+
+    <!-- SIDE LOG -->
+    <div id="side-col">
+        <div class="side-header">
+            CE/PE Flow Rank
+            <span id="log-count" style="color:var(--dim);font-weight:400">0 stocks</span>
+        </div>
+        <div id="alert-log"></div>
+        <div id="leaderboard">
+            <div class="lb-title">🔥 Top Movers (Heat Score)</div>
+            <div id="lb-list"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// =========================================================
+// STATE
+// =========================================================
+const tickerScores = {};
+const tickerOI = {};         // last known OI per key
+const tickerCE = {};         // per-stock CE alert count
+const tickerPE = {};         // per-stock PE alert count
+const DECAY_RATE = 0.97;
+const POINTS_PER_TRADE = 40;
+const HOT_THRESHOLD = 200;
+
+let totalAlerts = 0;
+let totalValue = 0;
+let ceSideCount = 0;
+let peSideCount = 0;
+
+// Pending DOM mutations — flushed via rAF
+let pendingUpdates = [];
+let rafScheduled = false;
+
+// === MOVER FILTER STATE ===
+let moverData = {};       // name -> pct_change
+let filterActive = false;
+let filterThreshold = 2.0;
+
+function scheduleBatch(fn) {
+    pendingUpdates.push(fn);
+    if (!rafScheduled) {
+        rafScheduled = true;
+        requestAnimationFrame(flushBatch);
+    }
+}
+
+function flushBatch() {
+    const batch = pendingUpdates.splice(0);
+    batch.forEach(fn => fn());
+    rafScheduled = false;
+}
+
+// =========================================================
+// WEBSOCKET
+// =========================================================
+const feed = document.getElementById('feed-col');
+const connDot = document.getElementById('conn-dot');
+let socket;
+
+function connect() {
+    socket = new WebSocket('ws://localhost:8000/ws');
+
+    socket.onopen = () => {
+        connDot.classList.add('live');
+        connDot.title = 'Connected';
+    };
+
+    socket.onclose = () => {
+        connDot.classList.remove('live');
+        connDot.title = 'Disconnected — Reconnecting...';
+        setTimeout(connect, 3000); // Auto-reconnect
+    };
+
+    socket.onerror = () => socket.close();
+
+    socket.onmessage = function(event) {
+        let trade;
+        try { trade = JSON.parse(event.data); } catch { return; }
+
+        // Update global stats
+        totalAlerts++;
+        totalValue += trade.value || 0;
+
+        // Score — declare ticker FIRST before anything uses it
+        const ticker = trade.ticker;
+        const isCE = (trade.option_type || '').toUpperCase() === 'CE';
+        if (isCE) { ceSideCount++; tickerCE[ticker] = (tickerCE[ticker] || 0) + 1; }
+        else       { peSideCount++; tickerPE[ticker] = (tickerPE[ticker] || 0) + 1; }
+        const valueBonus = Math.min((trade.value || 0) / 100000, 50);
+        tickerScores[ticker] = (tickerScores[ticker] || 0) + POINTS_PER_TRADE + valueBonus;
+
+        // OI tracking
+        const prevOI = tickerOI[ticker] || 0;
+        const currOI = trade.oi || 0;
+        tickerOI[ticker] = currOI;
+        const oiDelta = currOI - prevOI;
+
+        // Batch all DOM work
+        scheduleBatch(() => {
+            let card = document.getElementById(`card-${ticker}`);
+            if (!card) {
+                card = createTickerCard(ticker);
+                feed.appendChild(card);
+                autoCompactCheck();
+                // Apply filter to newly created card immediately
+                if (filterActive) applyFilter();
+            }
+
+            const side = (trade.option_type || '').toUpperCase() === 'CE' ? 'ce' : 'pe';
+            const tbody = document.getElementById(`${side}-tbody-${ticker}`);
+            if (tbody) {
+                const row = createRow(trade);
+                tbody.insertBefore(row, tbody.firstChild);
+                if (tbody.rows.length > 50) tbody.deleteRow(-1);
+            }
+
+            updateCardVisuals(card, ticker, oiDelta, prevOI);
+            updateRatioLeaderboard();
+            updateStats();
+        });
+    };
+}
+
+connect();
+
+// =========================================================
+// NOISE FILTER — fetch movers and apply threshold
+// =========================================================
+async function fetchAndApplyFilter() {
+    const btn = document.getElementById('fetch-movers-btn');
+    const status = document.getElementById('filter-status');
+    const clearBtn = document.getElementById('clear-filter-btn');
+    const input = document.getElementById('threshold-input');
+
+    filterThreshold = parseFloat(input.value) || 2.0;
+
+    btn.classList.add('loading');
+    btn.innerText = '⏳ Fetching...';
+    status.innerText = 'Fetching live % changes from Upstox...';
+    status.style.color = 'var(--accent)';
+
+    try {
+        const res = await fetch('http://localhost:8000/movers');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+
+        if (json.error) throw new Error(json.error);
+
+        // Build lookup map
+        moverData = {};
+        json.stocks.forEach(s => {
+            moverData[s.name] = s.pct_change;
+        });
+
+        filterActive = true;
+        applyFilter();
+
+        const filtered = Object.values(moverData).filter(p => Math.abs(p) >= filterThreshold).length;
+        status.innerText = `Hiding ${filtered} stocks with |move| ≥ ${filterThreshold}% · ${json.count - filtered} active`;
+        status.style.color = 'var(--ce)';
+        clearBtn.style.display = 'inline-block';
+
+    } catch (e) {
+        status.innerText = `Error: ${e.message}`;
+        status.style.color = 'var(--pe)';
+    } finally {
+        btn.classList.remove('loading');
+        btn.innerText = '▶ Fetch & Apply';
+    }
+}
+
+function applyFilter() {
+    if (!filterActive) return;
+
+    const filteredStocks = [];
+
+    document.querySelectorAll('.ticker-card').forEach(card => {
+        const ticker = card.id.replace('card-', '');
+        const pct = moverData[ticker];
+
+        if (pct !== undefined && Math.abs(pct) >= filterThreshold) {
+            card.classList.add('filtered-out');
+            filteredStocks.push({ ticker, pct });
+        } else {
+            card.classList.remove('filtered-out');
+        }
+    });
+
+    // Update the filtered summary bar
+    const summary = document.getElementById('filtered-summary');
+    const pills = document.getElementById('filtered-pills');
+    const count = document.getElementById('filtered-count');
+
+    if (filteredStocks.length > 0) {
+        summary.classList.add('visible');
+        count.innerText = `${filteredStocks.length} hidden`;
+        // Sort: biggest movers first
+        filteredStocks.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+        pills.innerHTML = filteredStocks.map(({ ticker, pct }) => {
+            const cls = pct > 0 ? 'up' : '';
+            const sign = pct > 0 ? '+' : '';
+            return `<span class="filtered-pill ${cls}" title="Click to show ${ticker}"
+                onclick="peekFiltered('${ticker}')" style="cursor:pointer">
+                ${ticker} ${sign}${pct.toFixed(1)}%
+            </span>`;
+        }).join('');
+    } else {
+        summary.classList.remove('visible');
+        pills.innerHTML = '';
+        count.innerText = '';
+    }
+}
+
+// Temporarily peek at a filtered stock by clicking its pill
+function peekFiltered(ticker) {
+    const card = document.getElementById('card-' + ticker);
+    if (!card) return;
+    // Toggle temporary visibility
+    if (card.classList.contains('peek')) {
+        card.classList.remove('peek');
+        card.classList.add('filtered-out');
+    } else {
+        card.classList.remove('filtered-out');
+        card.classList.add('peek');
+        // Add a bright warning stripe so you know it's filtered
+        card.style.borderColor = 'rgba(255,61,107,0.5)';
+        card.style.opacity = '0.6';
+    }
+}
+
+function clearFilter() {
+    filterActive = false;
+    moverData = {};
+    document.querySelectorAll('.ticker-card').forEach(card => {
+        card.classList.remove('filtered-out', 'peek');
+        card.style.borderColor = '';
+        card.style.opacity = '';
+    });
+    // Hide summary bar
+    const summary = document.getElementById('filtered-summary');
+    if (summary) summary.classList.remove('visible');
+    const pills = document.getElementById('filtered-pills');
+    if (pills) pills.innerHTML = '';
+
+    document.getElementById('filter-status').innerText = 'Filter cleared — all stocks visible';
+    document.getElementById('filter-status').style.color = 'var(--dim)';
+    document.getElementById('clear-filter-btn').style.display = 'none';
+}
+
+// =========================================================
+// CARD CREATION
+// =========================================================
+function createTickerCard(ticker) {
+    const card = document.createElement('div');
+    card.className = 'ticker-card';
+    card.id = `card-${ticker}`;
+    card.innerHTML = `
+        <div class="card-header" onclick="toggleCard('${ticker}')">
+            <div class="ticker-name">${ticker}</div>
+            <div class="heat-bar-wrap"><div class="heat-bar" id="hbar-${ticker}" style="width:0%"></div></div>
+            <span class="heat-label" id="score-${ticker}">HEAT 0</span>
+            <span class="oi-badge oi-neutral" id="oi-${ticker}">OI –</span>
+            <span class="ratio-badge" id="ratio-${ticker}">C/P –</span>
+            <span class="collapse-arrow">▼</span>
+        </div>
+        <div class="card-body" id="grid-${ticker}">
+            <div class="side-panel">
+                <div class="side-label ce-text">▲ CALL WHALES (CE)</div>
+                <table>
+                    <thead><tr><th>Time</th><th>Strike</th><th>₹LTP</th><th>Value</th><th>Type</th></tr></thead>
+                    <tbody id="ce-tbody-${ticker}"></tbody>
+                </table>
+            </div>
+            <div class="side-panel">
+                <div class="side-label pe-text">▼ PUT WHALES (PE)</div>
+                <table>
+                    <thead><tr><th>Time</th><th>Strike</th><th>₹LTP</th><th>Value</th><th>Type</th></tr></thead>
+                    <tbody id="pe-tbody-${ticker}"></tbody>
+                </table>
+            </div>
+        </div>
+    `;
+    return card;
+}
+
+function createRow(trade) {
+    const tr = document.createElement('tr');
+    const isWhale = (trade.value || 0) > 500000;
+    if (isWhale) tr.className = 'whale-row';
+    tr.classList.add('new-row');
+
+    const sideClass = (trade.option_type || '').toUpperCase() === 'CE' ? 'ce-text' : 'pe-text';
+    const valDisplay = ((trade.value || 0) / 100000).toFixed(1) + 'L';
+    const cat = trade.category || '';
+
+    tr.innerHTML = `
+        <td style="opacity:0.5">${trade.timestamp || ''}</td>
+        <td><span class="${sideClass}">${trade.strike || ''}</span></td>
+        <td>₹${(trade.ltp || 0).toFixed(1)}</td>
+        <td style="font-weight:600">${isWhale ? '🐋 ' : ''}₹${valDisplay}</td>
+        <td><span class="category-tag ${cat}">${cat === 'HIDDEN_ACCUMULATION' ? 'ACCUM' : cat}</span></td>
+    `;
+    return tr;
+}
+
+// =========================================================
+// CARD VISUALS (OI badge + heat)
+// =========================================================
+function updateCardVisuals(card, ticker, oiDelta, prevOI) {
+    const score = tickerScores[ticker] || 0;
+    const pct = Math.min(score / 400 * 100, 100);
+
+    const hbar = document.getElementById(`hbar-${ticker}`);
+    const scoreEl = document.getElementById(`score-${ticker}`);
+    const oiEl = document.getElementById(`oi-${ticker}`);
+
+    if (hbar) hbar.style.width = pct + '%';
+    if (scoreEl) scoreEl.innerText = `HEAT ${Math.round(score)}`;
+
+    // OI direction badge
+    // Per-stock CE/PE ratio badge
+    const ratioEl = document.getElementById(`ratio-${ticker}`);
+    if (ratioEl) {
+        const ce = tickerCE[ticker] || 0;
+        const pe = tickerPE[ticker] || 0;
+        if (ce === 0 && pe === 0) {
+            ratioEl.innerText = 'C/P –';
+            ratioEl.className = 'ratio-badge ratio-neutral';
+        } else if (pe === 0) {
+            ratioEl.innerText = `C/P ∞`;
+            ratioEl.className = 'ratio-badge ratio-bull';
+        } else {
+            const r = (ce / pe).toFixed(1);
+            ratioEl.innerText = `C/P ${r}`;
+            ratioEl.className = 'ratio-badge ' + (r > 1.2 ? 'ratio-bull' : r < 0.8 ? 'ratio-bear' : 'ratio-neutral');
+        }
+    }
+
+    if (oiEl && prevOI > 0) {
+        if (oiDelta > 0) {
+            oiEl.className = 'oi-badge oi-up';
+            oiEl.innerText = `OI ↑`;
+            oiEl.title = `OI rising (+${oiDelta.toFixed(0)}) — New positions being built`;
+        } else if (oiDelta < 0) {
+            oiEl.className = 'oi-badge oi-down';
+            oiEl.innerText = `OI ↓`;
+            oiEl.title = `OI falling (${oiDelta.toFixed(0)}) — Positions being closed`;
+        } else {
+            oiEl.className = 'oi-badge oi-neutral';
+            oiEl.innerText = `OI –`;
+        }
+    }
+
+    if (score > HOT_THRESHOLD) card.classList.add('is-hot');
+    else card.classList.remove('is-hot');
+}
+
+// =========================================================
+// COMPACT MODE
+// =========================================================
+let isCompact = false;
+
+function toggleCompact() {
+    isCompact = !isCompact;
+    const feedCol = document.getElementById('feed-col');
+    const btn = document.getElementById('compact-btn');
+    feedCol.classList.toggle('compact-mode', isCompact);
+    btn.classList.toggle('active', isCompact);
+    btn.innerText = isCompact ? '⊟ Expanded' : '⊞ Compact';
+}
+
+// Auto-enable compact mode when there are many cards
+function autoCompactCheck() {
+    const cardCount = feed.querySelectorAll('.ticker-card').length;
+    if (cardCount > 15 && !isCompact) {
+        toggleCompact();
+        // Show a small toast
+        const toast = document.createElement('div');
+        toast.style.cssText = `position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+            background:#1e2a38;border:1px solid #f5a623;color:#f5a623;padding:8px 16px;
+            border-radius:4px;font-family:var(--mono);font-size:0.8em;z-index:999;
+            animation:fadeIn 0.3s ease`;
+        toast.innerText = `⊞ Auto-compact enabled (${cardCount} stocks active)`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+}
+
+// =========================================================
+// COLLAPSE / EXPAND
+// =========================================================
+function toggleCard(ticker) {
+    const card = document.getElementById(`card-${ticker}`);
+    if (!card) return;
+    const isNowExpanded = card.classList.toggle('expanded');
+    const arrow = card.querySelector('.collapse-arrow');
+    if (arrow) arrow.style.transform = isNowExpanded ? 'rotate(180deg)' : 'rotate(0deg)';
+}
+
+function setAllCollapse(shouldHide) {
+    document.querySelectorAll('.ticker-card').forEach(c => {
+        if (shouldHide) {
+            c.classList.remove('expanded');
+        } else {
+            c.classList.add('expanded');
+        }
+        const arrow = c.querySelector('.collapse-arrow');
+        if (arrow) arrow.style.transform = shouldHide ? 'rotate(0deg)' : 'rotate(180deg)';
+    });
+}
+
+// =========================================================
+// SIDE PANEL TOGGLE
+// =========================================================
+function toggleSidePanel() {
+    const side = document.getElementById('side-col');
+    const btn = document.getElementById('log-toggle-btn');
+    side.classList.toggle('collapsed');
+    btn.classList.toggle('active');
+}
+
+// =========================================================
+// CE/PE RATIO LEADERBOARD (right panel)
+// =========================================================
+const alertLog = document.getElementById('alert-log');
+const logCount = document.getElementById('log-count');
+
+// Thresholds for ranking eligibility
+const MIN_PE_ALERTS = 3;    // must have at least 3 put alerts
+const MIN_TOTAL_ALERTS = 10; // must have at least 10 alerts total
+
+function updateRatioLeaderboard() {
+    const allTickers = new Set([...Object.keys(tickerCE), ...Object.keys(tickerPE)]);
+
+    // Split into: eligible (meets thresholds) vs waiting (not enough data yet)
+    const eligible = [];
+    const waiting = [];
+
+    allTickers.forEach(t => {
+        const ce = tickerCE[t] || 0;
+        const pe = tickerPE[t] || 0;
+        const total = ce + pe;
+        const ratio = pe === 0 ? Infinity : ce / pe;
+        if (pe >= MIN_PE_ALERTS && total >= MIN_TOTAL_ALERTS) {
+            eligible.push({ t, ce, pe, ratio, total });
+        } else {
+            waiting.push({ t, ce, pe, ratio, total });
+        }
+    });
+
+    // Sort eligible by ratio descending
+    eligible.sort((a, b) => b.ratio - a.ratio);
+    // Sort waiting by total alerts descending so closest-to-threshold is on top
+    waiting.sort((a, b) => b.total - a.total);
+
+    logCount.innerText = `${eligible.length} ranked · ${waiting.length} pending`;
+
+    function renderRow({ t, ce, pe, ratio, total }) {
+        const ratioStr = ratio === Infinity ? '∞' : ratio.toFixed(2);
+        const cePct = total > 0 ? (ce / total * 100) : 50;
+        const bias = ratio > 1.2 ? 'bull' : ratio < 0.8 ? 'bear' : 'neutral';
+        const biasColor = bias === 'bull' ? 'var(--ce)' : bias === 'bear' ? 'var(--pe)' : 'var(--dim)';
+        const label = bias === 'bull' ? 'BULLISH' : bias === 'bear' ? 'BEARISH' : 'MIXED';
+        return `
+        <div class="log-entry" onclick="expandTicker('${t}')" style="cursor:pointer">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+                <span class="log-ticker" style="color:${biasColor}">${t}</span>
+                <span style="font-size:1em;font-weight:600;color:${biasColor}">C/P ${ratioStr}</span>
+            </div>
+            <div style="display:flex;gap:0;height:4px;border-radius:2px;overflow:hidden;margin:5px 0">
+                <div style="width:${cePct.toFixed(0)}%;background:var(--ce);transition:width 0.5s"></div>
+                <div style="width:${(100-cePct).toFixed(0)}%;background:var(--pe);transition:width 0.5s"></div>
+            </div>
+            <div class="log-meta" style="display:flex;justify-content:space-between">
+                <span class="ce-text">CE: ${ce}</span>
+                <span style="color:${biasColor};font-size:0.8em">${label}</span>
+                <span class="pe-text">PE: ${pe}</span>
+            </div>
+        </div>`;
+    }
+
+    // Render eligible rows, then a divider, then waiting rows in muted style
+    const waitingHTML = waiting.length > 0 ? `
+        <div style="padding:6px 8px;font-size:0.65em;color:var(--dim);
+            border-top:1px solid var(--border);margin-top:4px;letter-spacing:0.1em">
+            PENDING — needs ${MIN_PE_ALERTS} PE + ${MIN_TOTAL_ALERTS} total alerts
+        </div>
+        ${waiting.map(w => {
+            const needed = Math.max(MIN_PE_ALERTS - w.pe, 0);
+            const neededTotal = Math.max(MIN_TOTAL_ALERTS - w.total, 0);
+            const hint = needed > 0 ? `needs ${needed} more PE` : `needs ${neededTotal} more alerts`;
+            return `
+            <div class="log-entry" onclick="expandTicker('${w.t}')" 
+                style="cursor:pointer;opacity:0.45;font-size:0.9em">
+                <div style="display:flex;justify-content:space-between">
+                    <span class="log-ticker" style="color:var(--dim)">${w.t}</span>
+                    <span style="color:var(--dim);font-size:0.8em">${hint}</span>
+                </div>
+                <div class="log-meta" style="display:flex;justify-content:space-between;margin-top:3px">
+                    <span class="ce-text">CE: ${w.ce}</span>
+                    <span style="color:var(--dim)">total: ${w.total}</span>
+                    <span class="pe-text">PE: ${w.pe}</span>
+                </div>
+            </div>`;
+        }).join('')}` : '';
+
+    alertLog.innerHTML = eligible.map(renderRow).join('') + waitingHTML;
+}
+
+// Click a ratio row to expand that stock's card
+function expandTicker(ticker) {
+    const card = document.getElementById(`card-${ticker}`);
+    if (!card) return;
+    if (!card.classList.contains('expanded')) {
+        card.classList.add('expanded');
+        const arrow = card.querySelector('.collapse-arrow');
+        if (arrow) arrow.style.transform = 'rotate(180deg)';
+    }
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// =========================================================
+// STATS BAR
+// =========================================================
+function updateStats() {
+    document.getElementById('stat-alerts').innerText = totalAlerts;
+    document.getElementById('stat-value').innerText = '₹' + (totalValue / 100000).toFixed(0) + 'L';
+    const hot = document.querySelectorAll('.is-hot').length;
+    document.getElementById('stat-hot').innerText = hot;
+    const ratio = peSideCount > 0 ? (ceSideCount / peSideCount).toFixed(2) : '∞';
+    const ratioEl = document.getElementById('stat-ratio');
+    ratioEl.innerText = ratio;
+    ratioEl.style.color = parseFloat(ratio) > 1.2 ? 'var(--ce)' : parseFloat(ratio) < 0.8 ? 'var(--pe)' : 'var(--text)';
+
+    const stockCountEl = document.getElementById('stock-count');
+    if (stockCountEl) {
+        const n = feed.querySelectorAll('.ticker-card').length;
+        stockCountEl.innerText = `${n} stock${n !== 1 ? 's' : ''}`;
+    }
+
+    // Market pulse message
+    const pulseEl = document.getElementById('pulse-msg');
+    const bullish = ceSideCount > peSideCount * 1.3;
+    const bearish = peSideCount > ceSideCount * 1.3;
+    if (bullish) pulseEl.innerText = `Bullish flow dominant — CE whales ${ceSideCount} vs PE ${peSideCount}`;
+    else if (bearish) pulseEl.innerText = `Bearish flow dominant — PE whales ${peSideCount} vs CE ${ceSideCount}`;
+    else pulseEl.innerText = `Mixed flow — CE: ${ceSideCount} | PE: ${peSideCount}`;
+}
+
+// =========================================================
+// DECAY + SORT + LEADERBOARD (every second)
+// =========================================================
+setInterval(() => {
+    for (let ticker in tickerScores) {
+        tickerScores[ticker] = Math.max(0, tickerScores[ticker] * DECAY_RATE);
+    }
+
+    // Re-sort cards
+    const cards = Array.from(feed.querySelectorAll('.ticker-card'));
+    if (cards.length >= 2) {
+        cards.sort((a, b) => {
+            const ta = a.id.replace('card-', '');
+            const tb = b.id.replace('card-', '');
+            return (tickerScores[tb] || 0) - (tickerScores[ta] || 0);
+        });
+        cards.forEach(c => feed.appendChild(c));
+    }
+
+    // Update heat bars for all
+    for (let ticker in tickerScores) {
+        const card = document.getElementById(`card-${ticker}`);
+        const hbar = document.getElementById(`hbar-${ticker}`);
+        const scoreEl = document.getElementById(`score-${ticker}`);
+        const score = tickerScores[ticker] || 0;
+        if (hbar) hbar.style.width = Math.min(score / 400 * 100, 100) + '%';
+        if (scoreEl) scoreEl.innerText = `HEAT ${Math.round(score)}`;
+        if (card) {
+            if (score > HOT_THRESHOLD) card.classList.add('is-hot');
+            else card.classList.remove('is-hot');
+        }
+    }
+
+    // Leaderboard
+    updateLeaderboard();
+}, 1000);
+
+function updateLeaderboard() {
+    const lb = document.getElementById('lb-list');
+    const sorted = Object.entries(tickerScores)
+        .filter(([, v]) => v > 1)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 5);
+
+    if (sorted.length === 0) return;
+    const maxScore = sorted[0][1];
+
+    lb.innerHTML = sorted.map(([ticker, score], i) => `
+        <div class="lb-row">
+            <span class="lb-rank">${i + 1}</span>
+            <span class="lb-name">${ticker}</span>
+            <div class="lb-bar-wrap"><div class="lb-bar" style="width:${(score/maxScore*100).toFixed(0)}%"></div></div>
+            <span class="lb-val">${Math.round(score)}</span>
+        </div>
+    `).join('');
+}
+</script>
+</body>
+</html>
