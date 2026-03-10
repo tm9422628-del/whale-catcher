@@ -330,6 +330,10 @@ async def queue_worker():
                         trade_history[key].append((ltt / 1000, price * new_qty, price, current_oi, new_qty))
                     last_trade_info[key].update({"ltt": ltt, "vtt": vtt, "oi": current_oi})
 
+
+                    #       notes #
+                    #   the whole purpose of the last_trade_info dictionary is to prevent duplication 
+
         except:
             pass
         finally:
@@ -461,7 +465,8 @@ async def energy_monitor():
                     f"| Score: {conviction} | OI+{oi_growth_from_open:.0f}% | "
                     f"Alerts today: {reg['alert_count']} | "
                     f"Active: {reg['time_active_minutes']:.0f}min | "
-                    f"₹{reg['cumulative_value']/100000:.1f}L total",
+                    f"₹{reg['cumulative_value']/100000:.1f}L total"
+                    f"{datetime.now().strftime('%H:%M')}",
                     flush=True
                 )
 
@@ -516,6 +521,11 @@ if __name__ == "__main__":
         if keys:
             print(f"✅ Subscribing to {len(keys)} instruments from {len(df)} stocks...")
             INSTRUMENT_MAP = create_optimized_lookup(keys)
+            print("\n\n\n\n")
+            print(INSTRUMENT_MAP)
+            print(type(INSTRUMENT_MAP))
+            print(len(INSTRUMENT_MAP))
+            print("\n\n\n\n")
             asyncio.run(fetch_market_data(keys))
         else:
             print("❌ No valid instrument keys found in atm_option_table.csv")
